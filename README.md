@@ -1,6 +1,6 @@
 # Cutroom video clipping demo
 
-The hosted build exports clips entirely in the browser, so source videos stay on the user's device. It produces MP4 when the browser supports MP4 recording and WebM otherwise. The local Python mode below remains available for precise FFmpeg trimming and original-quality keyframe cuts.
+The hosted build exports clips entirely in the browser, so source videos stay on the user's device. It produces MP4 when the browser supports MP4 recording and WebM otherwise. Frames are rendered through a canvas so phone-video orientation is baked into the exported pixels instead of depending on rotation metadata. The local Python mode below remains available for precise FFmpeg trimming and original-quality keyframe cuts.
 
 ## Quick start
 

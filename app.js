@@ -144,25 +144,30 @@ async function browserExport(selection, outputName, controller) {
 
   await seek(video, selection.start);
   const sourceStream = capture.call(video);
-  let stream = sourceStream;
-  let animation;
-  if (selection.crop) {
-    const [x, y, w, h] = selection.crop;
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(2, Math.floor(video.videoWidth * w / 2) * 2);
-    canvas.height = Math.max(2, Math.floor(video.videoHeight * h / 2) * 2);
-    const context = canvas.getContext('2d', {alpha: false});
-    const draw = () => {
-      context.drawImage(video,
-        video.videoWidth * x, video.videoHeight * y,
-        video.videoWidth * w, video.videoHeight * h,
-        0, 0, canvas.width, canvas.height);
+  // MediaRecorder can discard a source file's rotation metadata. Drawing the
+  // displayed video into a canvas bakes the browser-corrected orientation into
+  // every output frame, including when no crop was requested.
+  const [x, y, w, h] = selection.crop || [0, 0, 1, 1];
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(2, Math.floor(video.videoWidth * w / 2) * 2);
+  canvas.height = Math.max(2, Math.floor(video.videoHeight * h / 2) * 2);
+  const context = canvas.getContext('2d', {alpha: false});
+  let animation, videoFrameCallback = false;
+  const draw = () => {
+    context.drawImage(video,
+      video.videoWidth * x, video.videoHeight * y,
+      video.videoWidth * w, video.videoHeight * h,
+      0, 0, canvas.width, canvas.height);
+    if (video.requestVideoFrameCallback) {
+      videoFrameCallback = true;
+      animation = video.requestVideoFrameCallback(draw);
+    } else {
       animation = requestAnimationFrame(draw);
-    };
-    draw();
-    stream = canvas.captureStream(30);
-    for (const track of sourceStream.getAudioTracks()) stream.addTrack(track);
-  }
+    }
+  };
+  draw();
+  const stream = canvas.captureStream(30);
+  for (const track of sourceStream.getAudioTracks()) stream.addTrack(track);
 
   const chunks = [];
   const recorder = new MediaRecorder(stream, {mimeType: type, videoBitsPerSecond: 8_000_000});
@@ -194,7 +199,8 @@ async function browserExport(selection, outputName, controller) {
     return {blob, name: outputName.replace(/\.mp4$/i, extension)};
   } finally {
     clearInterval(timer);
-    cancelAnimationFrame(animation);
+    if (videoFrameCallback) video.cancelVideoFrameCallback(animation);
+    else cancelAnimationFrame(animation);
     controller.signal.removeEventListener('abort', abort);
     video.muted = false;
     for (const track of stream.getTracks()) track.stop();
